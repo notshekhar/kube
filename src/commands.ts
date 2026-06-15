@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
 // Injected at build time by build-bin.ts. Undefined when running from source.
-declare const __KUBE_VERSION__: string;
+declare const __DIGG_VERSION__: string;
 
-const REPO_SLUG = "notshekhar/kube";
+const REPO_SLUG = "notshekhar/digg";
 const INSTALL_URL = `https://raw.githubusercontent.com/${REPO_SLUG}/main/install.sh`;
 
 export function packageRoot(): string {
@@ -13,8 +13,8 @@ export function packageRoot(): string {
 }
 
 export function getVersion(): string {
-    if (typeof __KUBE_VERSION__ !== "undefined") {
-        return __KUBE_VERSION__;
+    if (typeof __DIGG_VERSION__ !== "undefined") {
+        return __DIGG_VERSION__;
     }
     try {
         const pkg = JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8"));
@@ -26,7 +26,7 @@ export function getVersion(): string {
 
 export function runUpgrade(opts: { force?: boolean } = {}): void {
     const root = packageRoot();
-    process.stdout.write(`▶ Updating kube (current v${getVersion()})…\n`);
+    process.stdout.write(`▶ Updating digg (current v${getVersion()})…\n`);
 
     if (existsSync(join(root, ".git"))) {
         const pull = spawnSync("git", ["-C", root, "pull", opts.force ? "--force" : "--ff-only"], { stdio: "inherit" });
@@ -39,7 +39,7 @@ export function runUpgrade(opts: { force?: boolean } = {}): void {
 
     const env = { ...process.env };
     if (opts.force) {
-        env.KUBE_FORCE = "1";
+        env.DIGG_FORCE = "1";
     }
     const result = spawnSync("bash", ["-c", `curl -fsSL ${INSTALL_URL} | bash`], { stdio: "inherit", env });
     process.exit(result.status ?? 1);

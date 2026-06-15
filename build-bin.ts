@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-// Standalone binary build via `bun build --compile`. kube is pure JS/TS, so
+// Standalone binary build via `bun build --compile`. digg is pure JS/TS, so
 // any target cross-compiles from any host.
 //
-// Output: dist/bin/<target>/kube (+ package.json) and dist/bin/kube-<target>.tar.gz
+// Output: dist/bin/<target>/digg (+ package.json) and dist/bin/digg-<target>.tar.gz
 
 import { readFileSync, mkdirSync, existsSync, rmSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
@@ -48,7 +48,7 @@ const ext = target.includes("windows") ? ".exe" : "";
 
 const binDir = join(import.meta.dir, "dist", "bin");
 const stageDir = join(binDir, shortTarget);
-const binPath = join(stageDir, `kube${ext}`);
+const binPath = join(stageDir, `digg${ext}`);
 
 if (existsSync(stageDir)) {
     rmSync(stageDir, { recursive: true });
@@ -61,12 +61,12 @@ await $`bun build ${join(import.meta.dir, "src/cli.ts")} \
   --compile \
   --target=${target} \
   --minify \
-  --define __KUBE_VERSION__=${JSON.stringify(pkg.version)} \
+  --define __DIGG_VERSION__=${JSON.stringify(pkg.version)} \
   --outfile ${binPath}`;
 
 copyFileSync(join(import.meta.dir, "package.json"), join(stageDir, "package.json"));
 
-const tarballRel = `kube-${shortTarget}.tar.gz`;
+const tarballRel = `digg-${shortTarget}.tar.gz`;
 const tarball = join(binDir, tarballRel);
 if (existsSync(tarball)) {
     rmSync(tarball);

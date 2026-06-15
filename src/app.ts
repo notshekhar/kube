@@ -20,6 +20,7 @@ import { ScrollView } from "./views/scroll-view.ts";
 import { LogView } from "./views/log-view.ts";
 import { type DetailHost, type LogSpec, DetailView } from "./views/detail-view.ts";
 import { Selector } from "./views/selector.ts";
+import { getContextPrefs, getLastContext, setContextPrefs, setLastContext } from "./settings.ts";
 
 const ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h";
 const DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l";
@@ -27,7 +28,7 @@ const REFRESH_MS = 5000;
 
 type Mode = "list" | "detail" | "logs" | "drill" | "select" | "confirm";
 
-export class KubeApp implements Component, DetailHost {
+export class DiggApp implements Component, DetailHost {
     private tui = new TUI(new ProcessTerminal());
     private quitting = false;
 
@@ -57,7 +58,7 @@ export class KubeApp implements Component, DetailHost {
     // ── lifecycle ──────────────────────────────────────────────────────────
     async start(): Promise<void> {
         if (!(await isKubectlAvailable())) {
-            process.stderr.write("kube: kubectl not found on PATH. Install kubectl and try again.\n");
+            process.stderr.write("digg: kubectl not found on PATH. Install kubectl and try again.\n");
             process.exit(1);
         }
 
@@ -118,7 +119,11 @@ export class KubeApp implements Component, DetailHost {
 
     private async enterCluster(context: string): Promise<void> {
         this.context = context;
-        this.namespace = null;
+        setLastContext(context);
+        // Restore the namespace + kind last used for this cluster.
+        const prefs = getContextPrefs(context);
+        this.namespace = prefs.namespace !== undefined ? prefs.namespace : null;
+        this.kind = (prefs.kind && findKind(prefs.kind)) || KINDS[0];
         this.closeSelector();
         await this.loadNamespaces();
         await this.refresh(false);
@@ -477,6 +482,7 @@ export class KubeApp implements Component, DetailHost {
             if (kind) {
                 this.kind = kind;
                 this.filter = "";
+                setContextPrefs(this.context, { kind: kind.name });
             }
             this.closeSelector();
             void this.refresh(false);
@@ -491,6 +497,7 @@ export class KubeApp implements Component, DetailHost {
         const selector = new Selector("Switch namespace", choices);
         selector.onPick = (value) => {
             this.namespace = value === "*" ? null : value;
+            setContextPrefs(this.context, { namespace: this.namespace });
             this.closeSelector();
             void this.refresh(false);
         };
@@ -501,9 +508,18 @@ export class KubeApp implements Component, DetailHost {
 
     private openContextSelector(landing = false): void {
         const title = landing ? "Select a cluster" : "Switch context";
+        // On the landing menu, float the last-used cluster to the top so the
+        // cursor starts on it.
+        let ordered = this.contexts;
+        if (landing) {
+            const last = getLastContext();
+            if (last && this.contexts.includes(last)) {
+                ordered = [last, ...this.contexts.filter((c) => c !== last)];
+            }
+        }
         const selector = new Selector(
             title,
-            this.contexts.map((c) => ({ value: c, label: c })),
+            ordered.map((c) => ({ value: c, label: c })),
         );
         selector.onPick = (value) => {
             void this.enterCluster(value);
@@ -560,7 +576,7 @@ export class KubeApp implements Component, DetailHost {
             `${ui.headerKey("kind:")} ${ui.headerVal(this.kind.title)}`,
             `${ui.headerKey("count:")} ${ui.headerVal(String(this.visible.length))}`,
         ];
-        return ui.headerBar(` kube `) + "  " + segments.join(ui.dim("  ·  "));
+        return ui.headerBar(` digg `) + "  " + segments.join(ui.dim("  ·  "));
     }
 
     private footerLine(): string {
@@ -596,5 +612,5 @@ function errorText(err: unknown): string {
 }
 
 export function run(): void {
-    void new KubeApp().start();
+    void new DiggApp().start();
 }

@@ -54,7 +54,7 @@ jobs:
               working-directory: dist/bin
               run: |
                   : > SHA256SUMS
-                  for f in kube-*.tar.gz; do
+                  for f in digg-*.tar.gz; do
                     sha256sum "$f" >> SHA256SUMS
                     sha256sum "$f" > "$f.sha256"
                   done
@@ -67,6 +67,6 @@ jobs:
                   name: ${{ steps.tag.outputs.tag }}
                   generate_release_notes: true
                   files: |
-                      dist/bin/kube-*.tar.gz
-                      dist/bin/kube-*.tar.gz.sha256
+                      dist/bin/digg-*.tar.gz
+                      dist/bin/digg-*.tar.gz.sha256
                       dist/bin/SHA256SUMS

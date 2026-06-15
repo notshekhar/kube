@@ -1,4 +1,4 @@
-# kube
+# digg
 
 A fast **Kubernetes TUI** for your terminal — browse pods, deployments,
 services, nodes and more; switch namespaces and contexts; view YAML, describe,
@@ -14,7 +14,7 @@ PATH.**
 Prebuilt binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/notshekhar/kube/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/notshekhar/digg/main/install.sh | bash
 ```
 
 From source:
@@ -22,17 +22,17 @@ From source:
 ```bash
 bun install
 bun ./src/cli.ts        # run it
-bun build-bin.ts        # standalone binary in dist/bin/<target>/kube
+bun build-bin.ts        # standalone binary in dist/bin/<target>/digg
 ```
 
-Update with `kube update`. Uninstall with `KUBE_UNINSTALL=1 curl -fsSL .../install.sh | bash`.
+Update with `digg update`. Uninstall with `DIGG_UNINSTALL=1 curl -fsSL .../install.sh | bash`.
 
 ## Usage
 
 ```bash
-kube            # launch the cluster browser
-kube update     # update to the latest version
-kube version    # print the version
+digg            # launch the cluster browser
+digg update     # update to the latest version
+digg version    # print the version
 ```
 
 ### Keys

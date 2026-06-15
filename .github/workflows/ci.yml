@@ -19,5 +19,5 @@ jobs:
             - name: Build binary (smoke)
               run: |
                   bun build-bin.ts
-                  bin="$(find dist/bin -maxdepth 2 -name kube -type f | head -n1)"
+                  bin="$(find dist/bin -maxdepth 2 -name digg -type f | head -n1)"
                   "$bin" --version

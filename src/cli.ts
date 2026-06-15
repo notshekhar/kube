@@ -2,13 +2,13 @@
 import { run } from "./app.ts";
 import { getVersion, runUpgrade } from "./commands.ts";
 
-const HELP = `kube — a fast Kubernetes TUI
+const HELP = `digg — a fast Kubernetes TUI
 
 Usage:
-  kube                     Launch the interactive cluster browser
-  kube update, upgrade     Update to the latest version
-  kube version             Print the version
-  kube help                Show this help
+  digg                     Launch the interactive cluster browser
+  digg update, upgrade     Update to the latest version
+  digg version             Print the version
+  digg help                Show this help
 
 Options:
   -v, --version            Print the version
@@ -49,7 +49,7 @@ function main(): void {
     }
 
     if (!process.stdout.isTTY) {
-        process.stderr.write("kube: interactive UI requires a TTY.\n");
+        process.stderr.write("digg: interactive UI requires a TTY.\n");
         process.exit(1);
     }
 

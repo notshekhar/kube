@@ -1,11 +1,11 @@
 {
-    "name": "kube",
+    "name": "digg",
     "version": "0.1.0",
-    "description": "kube — a fast Kubernetes TUI in your terminal.",
+    "description": "digg — a fast Kubernetes TUI in your terminal.",
     "type": "module",
     "license": "MIT",
     "bin": {
-        "kube": "./src/cli.ts"
+        "digg": "./src/cli.ts"
     },
     "files": [
         "src"
@@ -16,7 +16,9 @@
     },
     "dependencies": {
         "@earendil-works/pi-tui": "^0.79.4",
-        "chalk": "^5.5.0"
+        "@types/configstore": "^6.0.2",
+        "chalk": "^5.5.0",
+        "configstore": "^8.0.0"
     },
     "devDependencies": {
         "@types/bun": "latest"
