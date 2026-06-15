@@ -39,7 +39,8 @@ export class LogView {
     }
 
     private viewportHeight(): number {
-        return Math.max(1, (process.stdout.rows || 24) - 4);
+        // header + rule + footer = 3 reserved; body fills the rest.
+        return Math.max(1, (process.stdout.rows || 24) - 3);
     }
 
     private maxOffset(): number {

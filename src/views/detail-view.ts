@@ -156,25 +156,16 @@ export class DetailView {
     }
 
     private openLogs(): void {
-        if (this.isWorkload) {
-            const pod = this.selectedPod();
-            // Prefer the highlighted pod's logs; fall back to all pods via selector.
-            if (pod?.metadata?.name) {
-                this.host.openLogs({
-                    context: this.context,
-                    namespace: pod.metadata.namespace,
-                    podName: pod.metadata.name,
-                    title: `${pod.metadata.name} · logs (live)`,
-                });
-            } else if (this.selector) {
-                this.host.openLogs({
-                    context: this.context,
-                    namespace: this.obj.metadata?.namespace,
-                    selector: this.selector,
-                    title: `${this.ref.name} · logs (all pods)`,
-                });
-            }
+        if (this.isWorkload && this.selector) {
+            // Inside a workload: aggregate live logs from every pod it owns.
+            this.host.openLogs({
+                context: this.context,
+                namespace: this.obj.metadata?.namespace,
+                selector: this.selector,
+                title: `${this.ref.name} · logs (all pods, live)`,
+            });
         } else {
+            // Inside a pod: that pod's logs only.
             this.host.openLogs({
                 context: this.context,
                 namespace: this.obj.metadata?.namespace,
@@ -204,11 +195,20 @@ export class DetailView {
         } else {
             lines.push(ui.columnHeader("  Containers"));
         }
-        lines.push(...this.table.render(width, this.tableHeight()));
 
-        const allPods = this.isWorkload ? " · l logs (selected pod)" : " · l logs";
-        const drill = this.isWorkload ? " · p open pod" : "";
-        lines.push(`  ${ui.footer(`y yaml · d describe${allPods}${drill} · esc back`)}`);
+        // Pad the table region to its reserved height so the footer pins to the
+        // bottom of the screen instead of floating below short content.
+        const tableHeight = this.tableHeight();
+        const tableLines = this.table.render(width, tableHeight);
+        while (tableLines.length < tableHeight) {
+            tableLines.push("");
+        }
+        lines.push(...tableLines);
+
+        const hint = this.isWorkload
+            ? "enter/p open pod · y yaml · d describe · l logs (all pods, live) · esc back"
+            : "y yaml · d describe · l logs (live) · esc back";
+        lines.push(`  ${ui.footer(hint)}`);
         return lines;
     }
 }

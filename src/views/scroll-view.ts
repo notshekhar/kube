@@ -20,7 +20,9 @@ export class ScrollView {
 
     private viewportHeight(): number {
         const rows = process.stdout.rows || 24;
-        return Math.max(1, rows - 4);
+        // header + rule + footer = 3 reserved; body fills the rest so the
+        // footer pins to the bottom row.
+        return Math.max(1, rows - 3);
     }
 
     private maxOffset(): number {

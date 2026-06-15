@@ -26,7 +26,9 @@ export class Selector {
     }
 
     private maxVisible(): number {
-        return Math.max(3, (process.stdout.rows || 24) - 5);
+        // Leave room for the scroll-info line SelectList adds when overflowing,
+        // so the list region never exceeds its reserved height.
+        return Math.max(3, (process.stdout.rows || 24) - 6);
     }
 
     private build(choices: Choice[]): SelectList {
@@ -73,7 +75,16 @@ export class Selector {
         const query = this.filter ? ui.accent(this.filter) : ui.dim("(type to filter)");
         const filterLine = padLine(`  ${ui.dim("filter:")} ${query}`, width);
         const lines = [header, filterLine, ""];
-        lines.push(...this.list.render(width));
+
+        // Pad the list region so the footer pins to the bottom row.
+        // Reserved: header + filter + blank + blank + footer = 5.
+        const rows = process.stdout.rows || 24;
+        const listRegion = Math.max(1, rows - 5);
+        const listLines = this.list.render(width);
+        while (listLines.length < listRegion) {
+            listLines.push("");
+        }
+        lines.push(...listLines);
         lines.push("");
         lines.push(padLine(`  ${ui.footer("↑/↓ move · enter select · esc cancel")}`, width));
         return lines;
