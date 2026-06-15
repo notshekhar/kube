@@ -1,5 +1,5 @@
 import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { ui } from "../theme.ts";
+import { logLevelColor, ui } from "../theme.ts";
 
 const MAX_LINES = 5000;
 
@@ -115,7 +115,13 @@ export class LogView {
         const gutter = " ".repeat(this.margin);
         const colWidth = Math.max(1, width - this.margin);
         const window = this.lines.slice(this.offset, this.offset + height);
-        const body = window.map((line) => `${gutter}${truncateToWidth(line.slice(this.hoffset), colWidth)}`);
+        const body = window.map((line) => {
+            // Detect level from the full line, but color only the visible slice
+            // (slicing first keeps horizontal panning ANSI-safe).
+            const visible = truncateToWidth(line.slice(this.hoffset), colWidth);
+            const color = logLevelColor(line);
+            return `${gutter}${color ? color(visible) : visible}`;
+        });
         while (body.length < height) {
             body.push("");
         }

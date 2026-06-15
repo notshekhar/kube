@@ -14,6 +14,35 @@ export const ui = {
     footer: (text: string) => chalk.gray(text),
 };
 
+/**
+ * Detect a log line's severity and return a colorizer, or null for plain.
+ * Handles common keywords, JSON `"level":"…"`, and klog (`E0615 …`) prefixes.
+ */
+export function logLevelColor(line: string): ((text: string) => string) | null {
+    // klog/glog: first char E/W/I/F + 4-digit date (kube components use this).
+    const klog = /^([EWIF])\d{4}\s/.exec(line);
+    if (klog) {
+        const c = klog[1];
+        if (c === "E" || c === "F") return chalk.red;
+        if (c === "W") return chalk.yellow;
+        return chalk.cyan;
+    }
+    const lower = line.toLowerCase();
+    if (/\b(error|err|fatal|panic|exception|crit(ical)?)\b/.test(lower) || /"level":\s*"(error|fatal|critical)"/.test(lower)) {
+        return chalk.red;
+    }
+    if (/\b(warn|warning)\b/.test(lower) || /"level":\s*"warn(ing)?"/.test(lower)) {
+        return chalk.yellow;
+    }
+    if (/\b(info|notice)\b/.test(lower) || /"level":\s*"info"/.test(lower)) {
+        return chalk.cyan;
+    }
+    if (/\b(debug|trace)\b/.test(lower) || /"level":\s*"(debug|trace)"/.test(lower)) {
+        return chalk.gray;
+    }
+    return null;
+}
+
 export function getSelectListTheme(): SelectListTheme {
     return {
         selectedPrefix: (text) => chalk.cyan(text),
