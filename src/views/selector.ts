@@ -49,12 +49,23 @@ export class Selector {
     }
 
     handleInput(data: string): void {
+        // Mouse wheel → move the selection (SelectList has no wheel handling).
+        const mouse = /^\x1b\[<(\d+);\d+;\d+[Mm]$/.exec(data);
+        if (mouse) {
+            const button = Number(mouse[1]);
+            const arrow = button === 64 ? "\x1b[A" : button === 65 ? "\x1b[B" : null;
+            if (arrow) {
+                this.list.handleInput?.(arrow);
+                this.list.handleInput?.(arrow);
+                this.list.handleInput?.(arrow);
+            }
+            return;
+        }
         if (
             matchesKey(data, "up") ||
             matchesKey(data, "down") ||
             matchesKey(data, "enter") ||
-            matchesKey(data, "escape") ||
-            data.startsWith("\x1b[<")
+            matchesKey(data, "escape")
         ) {
             this.list.handleInput?.(data);
             return;

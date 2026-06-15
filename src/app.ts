@@ -55,10 +55,10 @@ export class DiggApp implements Component, DetailHost {
     private status = "connecting…";
     private timer?: ReturnType<typeof setInterval>;
 
-    // Mouse capture is OFF by default so native text selection / copy works
-    // everywhere (capturing the mouse disables the terminal's own selection).
-    // Press `m` to enable wheel-scrolling when you want it.
-    private mouseEnabled = false;
+    // Mouse capture is ON by default so the wheel scrolls the app (not the
+    // terminal scrollback) everywhere. Press `m` to turn it off when you want
+    // to select/copy text natively.
+    private mouseEnabled = true;
 
     // ── lifecycle ──────────────────────────────────────────────────────────
     async start(): Promise<void> {
@@ -690,8 +690,8 @@ export class DiggApp implements Component, DetailHost {
         if (this.status) {
             return `  ${ui.dim(this.status)}`;
         }
-        const wheel = this.mouseEnabled ? ui.dim("  · m wheel:on") : ui.dim("  · m wheel");
-        return `  ${ui.accent("[:] resources")}  ${ui.footer("enter open · n ns · c ctx · / filter · y yaml · d describe · l logs · x del · R refresh · ctrl+c quit")}${wheel}`;
+        const sel = this.mouseEnabled ? ui.dim("  · m to select text") : ui.accent("  · select mode (m)");
+        return `  ${ui.accent("[:] resources")}  ${ui.footer("enter open · n ns · c ctx · / filter · y yaml · d describe · l logs · x del · R refresh · ctrl+c quit")}${sel}`;
     }
 }
 

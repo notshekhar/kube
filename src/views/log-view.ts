@@ -18,7 +18,7 @@ export class LogView {
     private follow = true;
     private margin = 1;
     private pending = "";
-    private mouseOn = false;
+    private mouseOn = true;
 
     public onBack?: () => void;
     /** Toggle mouse capture; returns whether capture is now on. */
@@ -127,11 +127,11 @@ export class LogView {
         }
 
         const state = this.follow ? ui.accent("following") : ui.dim("paused");
-        const mouse = this.mouseOn ? `  ${ui.accent("wheel-scroll on")}` : `  ${ui.dim("drag to select/copy")}`;
+        const mouse = this.mouseOn ? "" : `  ${ui.accent("select mode — drag to copy")}`;
         const header = pad(`${ui.headerBar(` ${this.title} `)}  ${state}${mouse}`, width);
         const rule = ui.rule("─".repeat(width));
         const footer = pad(
-            `${gutter}${ui.footer("↑/↓ scroll · ←/→ pan · f follow · G live · m wheel · esc back")}`,
+            `${gutter}${ui.footer("↑/↓ scroll · ←/→ pan · f follow · G live · m select · esc back")}`,
             width,
         );
         return [header, rule, ...body, footer];

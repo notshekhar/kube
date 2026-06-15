@@ -21,11 +21,11 @@ Interactive keys:
   /             filter        y      YAML (e to edit)
   d             describe      l      logs (live)
   r             revisions     x      delete (confirm)
-  R             refresh       m      toggle mouse wheel
+  R             refresh       m      toggle mouse (select mode)
   esc           back          ctrl+c quit
 
-Mouse capture is off by default so you can select/copy text normally;
-press m to enable wheel-scrolling.`;
+Mouse wheel scrolls everywhere by default. Press m to release the mouse
+when you want to select/copy text, then m again to resume scrolling.`;
 
 function main(): void {
     const args = process.argv.slice(2);
