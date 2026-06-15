@@ -1,4 +1,4 @@
-import { type Component, TUI, ProcessTerminal, matchesKey, visibleWidth } from "@earendil-works/pi-tui";
+import { type Component, TUI, ProcessTerminal, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
     type K8sObject,
     type ResourceRef,
@@ -63,12 +63,15 @@ export class KubeApp implements Component {
             return undefined;
         });
         process.on("SIGINT", () => this.quit());
+        // Always restore mouse reporting, even if pi-tui throws mid-render —
+        // otherwise the terminal keeps emitting raw mouse escape sequences.
+        process.on("exit", () => process.stdout.write(DISABLE_MOUSE));
 
         process.stdout.write(ENABLE_MOUSE);
         this.tui.addChild(this);
         this.tui.setFocus(this);
         this.tui.start();
-        this.render(process.stdout.columns || 80);
+        this.tui.requestRender();
 
         await this.init();
         this.timer = setInterval(() => {
@@ -93,14 +96,23 @@ export class KubeApp implements Component {
 
     private async init(): Promise<void> {
         try {
-            this.context = await getCurrentContext();
+            this.context = await getCurrentContext().catch(() => "");
             this.contexts = await getContexts();
-            await this.loadNamespaces();
-            await this.refresh(false);
+            // Land on a context menu (Fleet-style), defaulting to the current one.
+            this.openContextSelector(true);
+            this.tui.requestRender();
         } catch (err) {
             this.status = errorText(err);
             this.tui.requestRender();
         }
+    }
+
+    private async enterCluster(context: string): Promise<void> {
+        this.context = context;
+        this.namespace = null;
+        this.closeSelector();
+        await this.loadNamespaces();
+        await this.refresh(false);
     }
 
     private async loadNamespaces(): Promise<void> {
@@ -325,21 +337,17 @@ export class KubeApp implements Component {
         this.mode = "select";
     }
 
-    private openContextSelector(): void {
+    private openContextSelector(landing = false): void {
+        const title = landing ? "Select a cluster" : "Switch context";
         const selector = new Selector(
-            "Switch context",
+            title,
             this.contexts.map((c) => ({ value: c, label: c })),
         );
         selector.onPick = (value) => {
-            this.context = value;
-            this.namespace = null;
-            this.closeSelector();
-            void (async () => {
-                await this.loadNamespaces();
-                await this.refresh(false);
-            })();
+            void this.enterCluster(value);
         };
-        selector.onCancel = () => this.closeSelector();
+        // On the landing menu there's nothing behind us, so esc quits.
+        selector.onCancel = landing ? () => this.quit() : () => this.closeSelector();
         this.selector = selector;
         this.mode = "select";
     }
@@ -356,25 +364,26 @@ export class KubeApp implements Component {
     }
 
     render(width: number): string[] {
+        let lines: string[];
         if (this.mode === "select" && this.selector) {
-            return fill(this.selector.render(width), width);
+            lines = fill(this.selector.render(width), width);
+        } else if (this.mode === "detail" && this.detail) {
+            lines = fill(this.detail.render(width), width);
+        } else {
+            const header = pad(this.headerLine(), width);
+            const rule = ui.rule("─".repeat(width));
+            const body = this.table.render(width, this.bodyHeight());
+            const footer = pad(this.footerLine(), width);
+            lines = [header, rule, ...body];
+            const total = process.stdout.rows || 24;
+            while (lines.length < total - 1) {
+                lines.push("");
+            }
+            lines.push(footer);
         }
-        if (this.mode === "detail" && this.detail) {
-            return fill(this.detail.render(width), width);
-        }
-
-        const header = pad(this.headerLine(), width);
-        const rule = ui.rule("─".repeat(width));
-        const body = this.table.render(width, this.bodyHeight());
-        const footer = pad(this.footerLine(), width);
-
-        const lines = [header, rule, ...body];
-        const total = process.stdout.rows || 24;
-        while (lines.length < total - 1) {
-            lines.push("");
-        }
-        lines.push(footer);
-        return lines;
+        // pi-tui hard-crashes on any line wider than the terminal; truncate as a
+        // final safety net so a long footer/row can never take the UI down.
+        return lines.map((line) => truncateToWidth(line, width));
     }
 
     private headerLine(): string {
@@ -406,13 +415,13 @@ function pad(text: string, width: number): string {
     return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
 }
 
-function fill(lines: string[], width: number): string[] {
+function fill(lines: string[], _width: number): string[] {
     const total = process.stdout.rows || 24;
     const out = [...lines];
     while (out.length < total) {
         out.push("");
     }
-    return out.map((line) => (visibleWidth(line) < width ? line : line));
+    return out;
 }
 
 function errorText(err: unknown): string {
