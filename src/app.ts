@@ -3,8 +3,10 @@ import {
     type K8sObject,
     type PodMetrics,
     type ResourceRef,
+    applyManifest,
     deleteResource,
     describe,
+    getJson,
     getYaml,
     isKubectlAvailable,
     listResources,
@@ -18,15 +20,17 @@ import { type DetailHost, DetailView } from "./views/detail-view.ts";
 import { Selector } from "./views/selector.ts";
 import { contextSelector, kindSelector, namespaceSelector } from "./views/selectors.ts";
 import { renderList } from "./views/list-view.ts";
+import { VimEditor } from "./views/editor/vim-editor.ts";
 import { fill, overlayConfirm } from "./views/layout.ts";
 import { errorText } from "./util.ts";
-import { getLastContext } from "./settings.ts";
+import { fromEditableYaml, isSecretOrConfigMap, toEditableYaml } from "./secret-yaml.ts";
+import { getEditorOptions, getLastContext, setEditorOptions } from "./settings.ts";
 
 const ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h";
 const DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l";
 const REFRESH_MS = 5000;
 
-type Mode = "list" | "detail" | "logs" | "drill" | "select" | "confirm";
+type Mode = "list" | "detail" | "logs" | "drill" | "select" | "confirm" | "edit";
 
 /**
  * Root TUI component and orchestrator. Owns the terminal lifecycle, the active
@@ -53,6 +57,8 @@ export class DiggApp implements Component, DetailHost {
     private mode: Mode = "list";
     private afterLogs: Mode = "list";
     private detail?: ScrollView;
+    private editor?: VimEditor;
+    private afterEdit: Mode = "list";
     private drillStack: DetailView[] = [];
     private selector?: Selector;
     private confirm?: { message: string; action: () => Promise<string> };
@@ -166,6 +172,9 @@ export class DiggApp implements Component, DetailHost {
                 break;
             case "detail":
                 this.detail?.handleInput(data);
+                break;
+            case "edit":
+                this.editor?.handleInput(data);
                 break;
             case "logs":
                 this.logs.handleInput(data);
@@ -289,34 +298,59 @@ export class DiggApp implements Component, DetailHost {
         }
     }
 
-    /**
-     * Edit with `kubectl edit` — opens the live YAML in $EDITOR and applies on
-     * save. The TUI is suspended for the editor, then a fresh one is mounted.
-     */
+    /** Open the in-app modal editor on a resource and apply on save. */
     private editResource(ref: ResourceRef): void {
-        if (this.timer) {
-            clearInterval(this.timer);
-        }
-        process.stdout.write(DISABLE_MOUSE);
-        this.tui.stop();
+        void this.openEditor(ref);
+    }
 
-        const args = ["--context", ref.context, "edit", ref.kind, ref.name];
-        if (ref.namespace) {
-            args.push("-n", ref.namespace);
-        }
+    /**
+     * Fetch the resource, mount the VimEditor, and apply on save. Secrets and
+     * ConfigMaps are decoded (base64 → text) so values edit as plain text; all
+     * other kinds open their live YAML. The refresh timer is paused while
+     * editing so a background reload can't clobber the buffer.
+     */
+    private async openEditor(ref: ResourceRef): Promise<void> {
+        this.status = "loading…";
+        this.tui.requestRender();
         try {
-            Bun.spawnSync(["kubectl", ...args], { stdin: "inherit", stdout: "inherit", stderr: "inherit", env: process.env });
-        } catch {
-            // restore the UI regardless
+            const obj = await getJson(ref);
+            const decoded = isSecretOrConfigMap(obj);
+            const text = decoded ? toEditableYaml(obj) : await getYaml(ref);
+            this.afterEdit = this.drillStack.length > 0 ? "drill" : "list";
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = undefined;
+            }
+            this.editor = new VimEditor({
+                title: `${ref.name} · ${ref.kind}`,
+                text,
+                filetype: "yaml",
+                options: getEditorOptions(),
+                onOptionsChange: (opts) => setEditorOptions(opts),
+                requestRender: () => this.tui.requestRender(),
+                onSave: async (edited) => {
+                    const manifest = decoded ? fromEditableYaml(edited, ref) : edited;
+                    return await applyManifest(manifest, ref.context);
+                },
+                onQuit: () => this.closeEditor(),
+            });
+            this.detail = undefined;
+            this.mode = "edit";
+            this.status = "";
+            this.tui.requestRender();
+        } catch (err) {
+            this.status = errorText(err);
+            this.tui.requestRender();
         }
+    }
 
-        this.detail = undefined;
-        this.mode = this.drillStack.length > 0 ? "drill" : "list";
-        this.tui = new TUI(new ProcessTerminal());
-        this.mountTui();
+    private closeEditor(): void {
+        this.editor = undefined;
+        this.mode = this.afterEdit;
         this.startTimer();
-        this.status = "applied edits (if saved)";
+        this.status = "";
         void this.reload(false);
+        this.tui.requestRender();
     }
 
     /** Logs for the selected list row: a pod directly, or all pods of a workload. */
@@ -515,6 +549,8 @@ export class DiggApp implements Component, DetailHost {
             lines = fill(this.selector.render(width));
         } else if (this.mode === "detail" && this.detail) {
             lines = fill(this.detail.render(width));
+        } else if (this.mode === "edit" && this.editor) {
+            lines = fill(this.editor.render(width));
         } else if (this.mode === "logs" && this.logs.active) {
             lines = fill(this.logs.render(width));
         } else if (this.mode === "drill" && this.drillStack.length > 0) {

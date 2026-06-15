@@ -1,6 +1,6 @@
 {
     "name": "digg",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "digg — a fast Kubernetes TUI in your terminal.",
     "type": "module",
     "license": "MIT",
@@ -18,7 +18,8 @@
         "@earendil-works/pi-tui": "^0.79.4",
         "@types/configstore": "^6.0.2",
         "chalk": "^5.5.0",
-        "configstore": "^8.0.0"
+        "configstore": "^8.0.0",
+        "yaml": "^2.9.0"
     },
     "devDependencies": {
         "@types/bun": "latest"

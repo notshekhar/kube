@@ -140,6 +140,38 @@ export async function getYaml(ref: ResourceRef): Promise<string> {
     return runOrThrow(args, ref.context);
 }
 
+/** Live object as JSON — the source we transform for the secret/config editor. */
+export async function getJson(ref: ResourceRef): Promise<K8sObject> {
+    const args = ["get", ref.kind, ref.name, "-o", "json"];
+    if (ref.namespace) {
+        args.push("-n", ref.namespace);
+    }
+    const out = await runOrThrow(args, ref.context);
+    return JSON.parse(out) as K8sObject;
+}
+
+/**
+ * Apply a manifest piped on stdin (`kubectl apply -f -`). Used by the in-app
+ * editor on save. Returns kubectl's stdout (e.g. "secret/foo configured").
+ */
+export async function applyManifest(manifest: string, context: string): Promise<string> {
+    const full = ["--context", context, "apply", "-f", "-"];
+    const proc = Bun.spawn(["kubectl", ...full], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    proc.stdin.write(manifest);
+    await proc.stdin.end();
+    const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+    ]);
+    if (code !== 0) {
+        throw new KubectlError(stderr.trim() || "kubectl apply failed");
+    }
+    // apply warns (not fails) when the object lacks a last-applied annotation;
+    // keep stdout as the success message and ignore that warning on stderr.
+    return stdout.trim();
+}
+
 export async function describe(ref: ResourceRef): Promise<string> {
     const args = ["describe", ref.kind, ref.name];
     if (ref.namespace) {
