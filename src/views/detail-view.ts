@@ -1,3 +1,4 @@
+import { matchesKey } from "@earendil-works/pi-tui";
 import type { K8sObject, PodMetrics, ResourceRef } from "../kubectl.ts";
 import { findKind, podContainers, workloadSelector, workloadSummary, age } from "../format.ts";
 import { ui } from "../theme.ts";
@@ -127,20 +128,30 @@ export class DetailView {
         if (this.table.handleInput(data, bodyHeight)) {
             return;
         }
-        // matchesKey via Table already handled nav; here handle actions.
-        if (data === "y" || data === "\r") {
+        // Table handled nav above; here handle actions. Use matchesKey so
+        // esc/enter work under the Kitty keyboard protocol (not raw bytes).
+        if (matchesKey(data, "escape") || matchesKey(data, "q")) {
+            this.host.back();
+        } else if (matchesKey(data, "enter")) {
+            if (this.isWorkload) {
+                const pod = this.selectedPod();
+                if (pod) {
+                    this.host.openPod(pod);
+                }
+            } else {
+                this.host.openYaml(this.ref);
+            }
+        } else if (matchesKey(data, "y")) {
             this.host.openYaml(this.ref);
-        } else if (data === "d") {
+        } else if (matchesKey(data, "d")) {
             this.host.openDescribe(this.ref);
-        } else if (data === "l") {
+        } else if (matchesKey(data, "l")) {
             this.openLogs();
-        } else if (data === "p" && this.isWorkload) {
+        } else if (matchesKey(data, "p") && this.isWorkload) {
             const pod = this.selectedPod();
             if (pod) {
                 this.host.openPod(pod);
             }
-        } else if (data === "q" || data === "\x1b") {
-            this.host.back();
         }
     }
 
