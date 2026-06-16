@@ -35,8 +35,13 @@ function decodeBase64(b64: string): Uint8Array {
     return new Uint8Array(Buffer.from(b64, "base64"));
 }
 
-function encodeBase64(text: string): string {
-    return Buffer.from(text, "utf-8").toString("base64");
+function encodeBase64(text: unknown): string {
+    return Buffer.from(asString(text), "utf-8").toString("base64");
+}
+
+/** Coerce a parsed scalar to its string form (guards against numeric/bool values). */
+function asString(value: unknown): string {
+    return value == null ? "" : String(value);
 }
 
 /** Drop server-managed fields that would only add noise or block `apply`. */
@@ -96,17 +101,23 @@ export function toEditableYaml(input: K8sObject): string {
  * immutable and editing them would target the wrong object.
  */
 export function fromEditableYaml(text: string, ref: ResourceRef): string {
-    const obj = YAML.parse(text) as K8sObject;
+    // Parse with the failsafe schema so every value stays a string — otherwise
+    // a value the user leaves unquoted (a port like 8080, `true`, a date) is
+    // coerced to a number/bool/Date and breaks base64 encoding / `apply`.
+    const obj = YAML.parse(text, { schema: "failsafe" }) as K8sObject;
     if (!obj || typeof obj !== "object") {
         throw new Error("document is empty or not a mapping");
     }
     assertIdentity(obj, ref);
 
     if (obj.kind === "Secret") {
-        const data: Record<string, string> = { ...((obj.data as Record<string, string> | undefined) ?? {}) };
-        const stringData = (obj.stringData as Record<string, string> | undefined) ?? {};
+        const data: Record<string, string> = {};
+        for (const [key, value] of Object.entries((obj.data as Record<string, unknown> | undefined) ?? {})) {
+            data[key] = asString(value);
+        }
+        const stringData = (obj.stringData as Record<string, unknown> | undefined) ?? {};
         for (const [key, value] of Object.entries(stringData)) {
-            data[key] = encodeBase64(value ?? "");
+            data[key] = encodeBase64(value);
         }
         delete obj.stringData;
         if (Object.keys(data).length > 0) {
@@ -114,10 +125,31 @@ export function fromEditableYaml(text: string, ref: ResourceRef): string {
         } else {
             delete obj.data;
         }
+    } else if (obj.kind === "ConfigMap") {
+        // Keep data/binaryData values as strings (apply rejects non-string values).
+        obj.data = coerceStringValues(obj.data);
+        obj.binaryData = coerceStringValues(obj.binaryData);
+        if (!obj.data) {
+            delete obj.data;
+        }
+        if (!obj.binaryData) {
+            delete obj.binaryData;
+        }
     }
-    // ConfigMap needs no re-encoding: data stays plain, binaryData stays base64.
 
     return YAML.stringify(reorder(obj), { lineWidth: 0 });
+}
+
+/** Coerce every value of a string→scalar map to a string, or undefined if empty/absent. */
+function coerceStringValues(map: unknown): Record<string, string> | undefined {
+    if (!map || typeof map !== "object") {
+        return undefined;
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(map as Record<string, unknown>)) {
+        out[key] = asString(value);
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function assertIdentity(obj: K8sObject, ref: ResourceRef): void {

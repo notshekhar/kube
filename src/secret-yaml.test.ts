@@ -69,6 +69,29 @@ describe("secret round-trip", () => {
         expect(appliedData(out).name).toBe(b64("plain"));
     });
 
+    test("unquoted numeric / boolean / date values are re-encoded as their text", () => {
+        // Simulates a user editing values without quotes; YAML would otherwise
+        // coerce these to number/bool/Date and break base64 encoding.
+        const edited = [
+            "apiVersion: v1",
+            "kind: Secret",
+            "type: Opaque",
+            "metadata:",
+            "  name: app-secret",
+            "  namespace: default",
+            "stringData:",
+            "  port: 8080",
+            "  flag: true",
+            "  when: 2026-06-15",
+            "",
+        ].join("\n");
+        const data = appliedData(fromEditableYaml(edited, ref));
+        const decode = (k: string) => Buffer.from(data[k], "base64").toString("utf-8");
+        expect(decode("port")).toBe("8080");
+        expect(decode("flag")).toBe("true");
+        expect(decode("when")).toBe("2026-06-15");
+    });
+
     test("rejects an edited name", () => {
         const obj = secret({ k: b64("v") });
         const editable = toEditableYaml(obj).replace("name: app-secret", "name: other-secret");
