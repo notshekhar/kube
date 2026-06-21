@@ -6,7 +6,7 @@ const MAX_LINES = 5000;
 /**
  * A live log pane. Lines are appended as `kubectl logs -f` streams them.
  * While "following", the view sticks to the bottom; scrolling up detaches
- * follow, and `G`/End re-attaches it.
+ * follow, and `f` toggles it back on (re-attaching to the tail).
  */
 const HSTEP = 8;
 
@@ -72,9 +72,6 @@ export class LogView {
         } else if (matchesKey(data, "g") || matchesKey(data, "home")) {
             this.offset = 0;
             this.follow = false;
-        } else if (matchesKey(data, "shift+g") || matchesKey(data, "end")) {
-            this.follow = true;
-            this.offset = this.maxOffset();
         } else if (matchesKey(data, "left") || matchesKey(data, "h")) {
             this.hoffset = Math.max(0, this.hoffset - HSTEP);
         } else if (matchesKey(data, "right") || matchesKey(data, "l")) {
@@ -102,10 +99,18 @@ export class LogView {
         }
         const button = Number(match[1]);
         if (button === 64) {
+            // wheel up
             this.offset -= 3;
             this.follow = false;
         } else if (button === 65) {
+            // wheel down
             this.offset += 3;
+        } else if (button === 66) {
+            // wheel left (or shift+wheel on some terminals)
+            this.hoffset = Math.max(0, this.hoffset - HSTEP);
+        } else if (button === 67) {
+            // wheel right
+            this.hoffset += HSTEP;
         }
     }
 
@@ -131,7 +136,7 @@ export class LogView {
         const header = pad(`${ui.headerBar(` ${this.title} `)}  ${state}${mouse}`, width);
         const rule = ui.rule("─".repeat(width));
         const footer = pad(
-            `${gutter}${ui.footer("↑/↓ scroll · ←/→ pan · f follow · G live · m select · esc back")}`,
+            `${gutter}${ui.footer("↑/↓ scroll · ←/→ pan · wheel scroll · f follow · m select · esc back")}`,
             width,
         );
         return [header, rule, ...body, footer];
