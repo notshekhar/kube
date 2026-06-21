@@ -1,4 +1,4 @@
-import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { logLevelColor, ui } from "../theme.ts";
 
 const MAX_LINES = 5000;
@@ -7,6 +7,9 @@ const MAX_LINES = 5000;
  * A live log pane. Lines are appended as `kubectl logs -f` streams them.
  * While "following", the view sticks to the bottom; scrolling up detaches
  * follow, and `f` toggles it back on (re-attaching to the tail).
+ *
+ * Horizontal panning is clamped to the widest line in the buffer, and `w`
+ * toggles soft-wrap (VS Code style) which drops horizontal scrolling entirely.
  */
 const HSTEP = 8;
 
@@ -16,9 +19,15 @@ export class LogView {
     private offset = 0;
     private hoffset = 0;
     private follow = true;
+    private wrap = false;
     private margin = 1;
     private pending = "";
     private mouseOn = true;
+    /** Widest line in the buffer (visible columns) — bounds horizontal pan. */
+    private maxWidth = 0;
+    /** Body column width + total visual rows from the last render, for clamping. */
+    private lastColWidth = 80;
+    private lastTotalRows = 0;
 
     public onBack?: () => void;
     /** Toggle mouse capture; returns whether capture is now on. */
@@ -35,13 +44,20 @@ export class LogView {
         this.pending = parts.pop() ?? "";
         for (const line of parts) {
             this.lines.push(line);
+            const w = visibleWidth(line);
+            if (w > this.maxWidth) {
+                this.maxWidth = w;
+            }
         }
-        if (this.lines.length > MAX_LINES) {
-            this.lines.splice(0, this.lines.length - MAX_LINES);
+        const overflow = this.lines.length - MAX_LINES;
+        if (overflow > 0) {
+            const dropped = this.lines.splice(0, overflow);
+            // Only rescan when we might have dropped the current widest line.
+            if (dropped.some((l) => visibleWidth(l) >= this.maxWidth)) {
+                this.maxWidth = this.lines.reduce((m, l) => Math.max(m, visibleWidth(l)), 0);
+            }
         }
-        if (this.follow) {
-            this.offset = this.maxOffset();
-        }
+        // Follow snapping happens in render(), which knows the wrapped row count.
     }
 
     private viewportHeight(): number {
@@ -50,11 +66,20 @@ export class LogView {
     }
 
     private maxOffset(): number {
-        return Math.max(0, this.lines.length - this.viewportHeight());
+        return Math.max(0, this.lastTotalRows - this.viewportHeight());
+    }
+
+    /** Furthest right we can pan: the widest line minus the viewport width. */
+    private maxHoffset(): number {
+        if (this.wrap) {
+            return 0;
+        }
+        return Math.max(0, this.maxWidth - this.lastColWidth);
     }
 
     private clamp(): void {
         this.offset = Math.min(Math.max(0, this.offset), this.maxOffset());
+        this.hoffset = Math.min(Math.max(0, this.hoffset), this.maxHoffset());
     }
 
     handleInput(data: string): void {
@@ -81,6 +106,9 @@ export class LogView {
             if (this.follow) {
                 this.offset = this.maxOffset();
             }
+        } else if (matchesKey(data, "w")) {
+            this.wrap = !this.wrap;
+            this.hoffset = 0;
         } else if (matchesKey(data, "m")) {
             this.mouseOn = this.onToggleMouse?.() ?? this.mouseOn;
         } else if (matchesKey(data, "escape") || matchesKey(data, "q")) {
@@ -115,30 +143,57 @@ export class LogView {
     }
 
     render(width: number): string[] {
-        this.clamp();
         const height = this.viewportHeight();
         const gutter = " ".repeat(this.margin);
         const colWidth = Math.max(1, width - this.margin);
-        const window = this.lines.slice(this.offset, this.offset + height);
-        const body = window.map((line) => {
-            // Detect level from the full line, but color only the visible slice
-            // (slicing first keeps horizontal panning ANSI-safe).
-            const visible = truncateToWidth(line.slice(this.hoffset), colWidth);
-            const color = logLevelColor(line);
-            return `${gutter}${color ? color(visible) : visible}`;
-        });
+        this.lastColWidth = colWidth;
+
+        let body: string[];
+        if (this.wrap) {
+            // Soft-wrap each line into visual rows; offset indexes those rows.
+            const rows: Array<{ text: string; src: string }> = [];
+            for (const line of this.lines) {
+                for (const piece of wrapTextWithAnsi(line, colWidth)) {
+                    rows.push({ text: piece, src: line });
+                }
+            }
+            this.lastTotalRows = rows.length;
+            if (this.follow) {
+                this.offset = Math.max(0, rows.length - height);
+            }
+            this.clamp();
+            body = rows.slice(this.offset, this.offset + height).map(({ text, src }) => {
+                const color = logLevelColor(src);
+                const visible = truncateToWidth(text, colWidth);
+                return `${gutter}${color ? color(visible) : visible}`;
+            });
+        } else {
+            this.lastTotalRows = this.lines.length;
+            if (this.follow) {
+                this.offset = Math.max(0, this.lines.length - height);
+            }
+            this.clamp();
+            body = this.lines.slice(this.offset, this.offset + height).map((line) => {
+                // Detect level from the full line, but color only the visible slice
+                // (slicing first keeps horizontal panning ANSI-safe).
+                const visible = truncateToWidth(line.slice(this.hoffset), colWidth);
+                const color = logLevelColor(line);
+                return `${gutter}${color ? color(visible) : visible}`;
+            });
+        }
         while (body.length < height) {
             body.push("");
         }
 
         const state = this.follow ? ui.accent("following") : ui.dim("paused");
+        const wrapTag = this.wrap ? `  ${ui.dim("wrap")}` : "";
         const mouse = this.mouseOn ? "" : `  ${ui.accent("select mode — drag to copy")}`;
-        const header = pad(`${ui.headerBar(` ${this.title} `)}  ${state}${mouse}`, width);
+        const header = pad(`${ui.headerBar(` ${this.title} `)}  ${state}${wrapTag}${mouse}`, width);
         const rule = ui.rule("─".repeat(width));
-        const footer = pad(
-            `${gutter}${ui.footer("↑/↓ scroll · ←/→ pan · wheel scroll · f follow · m select · esc back")}`,
-            width,
-        );
+        const hint = this.wrap
+            ? "↑/↓ scroll · w unwrap · f follow · m select · esc back"
+            : "↑/↓ scroll · ←/→ pan · w wrap · f follow · m select · esc back";
+        const footer = pad(`${gutter}${ui.footer(hint)}`, width);
         return [header, rule, ...body, footer];
     }
 }

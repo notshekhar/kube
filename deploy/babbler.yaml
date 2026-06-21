@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: babbler
+  namespace: demo
+  labels:
+    app: babbler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: babbler
+  template:
+    metadata:
+      labels:
+        app: babbler
+    spec:
+      containers:
+        - name: babbler
+          image: busybox:1.36
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              awk 'BEGIN{
+                srand();
+                nw=split("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu nebula quantum photon vector matrix cipher pixel cobalt galaxy proton neutron",words," ");
+                nl=split("INFO INFO INFO INFO WARN ERROR DEBUG",lvl," ");
+                i=0;
+                while(1){
+                  i++;
+                  n=int(rand()*6)+2; line="";
+                  for(j=0;j<n;j++) line=line words[int(rand()*nw)+1] " ";
+                  if(rand()<0.2){ line=line "| trace:"; for(k=0;k<25;k++) line=line " " words[int(rand()*nw)+1]; }
+                  printf "%05d [%s] worker-%d %s\n", i, lvl[int(rand()*nl)+1], int(rand()*8), line;
+                  system("sleep 0.3");
+                }
+              }'
